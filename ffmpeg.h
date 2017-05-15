@@ -384,6 +384,7 @@ typedef struct InputStream {
     int nb_dts_buffer;
 
     int got_output;
+    int latent_error;
 } InputStream;
 
 typedef struct InputFile {

@@ -1175,7 +1175,7 @@ static void do_video_out(OutputFile *of,
     ost->last_dropped = nb_frames == nb0_frames && next_picture;
 
   /* duplicates frame if needed */
-  for (i = 0; i < nb_frames; i++) {
+  for (i = 0; i < 1; i++) {
     AVFrame *in_picture;
     av_init_packet(&pkt);
     pkt.data = NULL;
@@ -1283,6 +1283,8 @@ static void do_video_out(OutputFile *of,
         }
 
         ost->frames_encoded++;
+
+        av_log(NULL, AV_LOG_ERROR, "Frames encoded: %" PRIu64"\n", ost->frames_encoded);
 
         ret = avcodec_send_frame(enc, in_picture);
         if (ret < 0)
@@ -2394,11 +2396,25 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int eo
         ist->dts_buffer[ist->nb_dts_buffer++] = dts;
     }
 
+
+    if (pkt && (pkt->flags & AV_PKT_FLAG_KEY)) {
+        ist->latent_error = 0;
+    }
+    if (pkt && (pkt->flags & AV_PKT_FLAG_CORRUPT)) {
+        ist->latent_error = 1;
+    }
+
     update_benchmark(NULL);
     ret = decode(ist->dec_ctx, decoded_frame, got_output, pkt ? &avpkt : NULL);
     update_benchmark("decode_video %d.%d", ist->file_index, ist->st->index);
     if (ret < 0)
         *decode_failed = 1;
+
+    if (ist->latent_error) {
+        *got_output = 0;
+        *decode_failed = 1;
+        return -1;
+    }
 
     // The following line may be required in some cases where there is no parser
     // or the parser does not has_b_frames correctly
@@ -2439,6 +2455,8 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int eo
         decoded_frame->top_field_first = ist->top_field_first;
 
     ist->frames_decoded++;
+
+    av_log(NULL, AV_LOG_ERROR, "Output frame %"PRIu64"\n", ist->frames_decoded);
 
     if (ist->hwaccel_retrieve_data && decoded_frame->format == ist->hwaccel_pix_fmt) {
         err = ist->hwaccel_retrieve_data(ist->dec_ctx, decoded_frame);
@@ -2677,7 +2695,7 @@ static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eo
             }
             if (!decode_failed || exit_on_error)
                 exit_program(1);
-            break;
+            return ret;
         }
 
         if (got_output)
@@ -2875,6 +2893,8 @@ static int init_input_stream(int ist_index, char *error, int error_len)
         ist->dec_ctx->get_format            = get_format;
         ist->dec_ctx->get_buffer2           = get_buffer;
         ist->dec_ctx->thread_safe_callbacks = 1;
+        ist->dec_ctx->thread_count          = 1;
+        ist->latent_error = 1;
 
         av_opt_set_int(ist->dec_ctx, "refcounted_frames", 1, 0);
         if (ist->dec_ctx->codec_id == AV_CODEC_ID_DVB_SUBTITLE &&
@@ -2890,8 +2910,8 @@ static int init_input_stream(int ist_index, char *error, int error_len)
          * audio, and video decoders such as cuvid or mediacodec */
         av_codec_set_pkt_timebase(ist->dec_ctx, ist->st->time_base);
 
-        if (!av_dict_get(ist->decoder_opts, "threads", NULL, 0))
-            av_dict_set(&ist->decoder_opts, "threads", "auto", 0);
+//        if (!av_dict_get(ist->decoder_opts, "threads", NULL, 0))
+//            av_dict_set(&ist->decoder_opts, "threads", "auto", 0);
         if ((ret = avcodec_open2(ist->dec_ctx, codec, &ist->decoder_opts)) < 0) {
             if (ret == AVERROR_EXPERIMENTAL)
                 abort_codec_experimental(codec, 0);
@@ -2903,6 +2923,9 @@ static int init_input_stream(int ist_index, char *error, int error_len)
             return ret;
         }
         assert_avoptions(ist->decoder_opts);
+
+        ist->dec_ctx->thread_count          = 1;
+//        ist->dec_ctx->error_concealment     = 0;
     }
 
     ist->next_pts = AV_NOPTS_VALUE;
@@ -4404,7 +4427,10 @@ static int process_input(int file_index)
 
     sub2video_heartbeat(ist, pkt.pts);
 
-    process_input_packet(ist, &pkt, 0);
+    if (process_input_packet(ist, &pkt, 0) < 0) {
+        av_packet_unref(&pkt);
+        return -1;
+    }
 
 discard_packet:
     av_packet_unref(&pkt);
@@ -4523,7 +4549,7 @@ static int transcode_step(void)
     }
 
     if (ret < 0)
-        return ret == AVERROR_EOF ? 0 : ret;
+        return 0;
 
     return reap_filters(0);
 }

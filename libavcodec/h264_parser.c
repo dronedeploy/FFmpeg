@@ -63,6 +63,7 @@ typedef struct H264ParseContext {
     int64_t reference_dts;
     int last_frame_num, last_picture_structure;
     int key_slice;
+    int total_frame_number;
 } H264ParseContext;
 
 
@@ -565,14 +566,14 @@ static inline int parse_nal_units(AVCodecParserContext *s,
 
             if (key_this_frame) {
                 if (slice_count != p->key_slice + 1 && slice_count != 1) {
-                    av_log(avctx, AV_LOG_DEBUG, "Parse: key: %d, should be %d\n", slice_count - 1, p->key_slice);
+                    av_log(avctx, AV_LOG_ERROR, "Parse: key: %d, should be %d\n", slice_count - 1, p->key_slice);
                     p->key_slice = 0;
                     goto fail;
                 }
                 p->key_slice = slice_count;
             }
 
-            av_log(avctx, AV_LOG_DEBUG, "Parse: first_mb_addr: %u frame_num: %d key: %d\n",
+            av_log(avctx, AV_LOG_ERROR, "Parse: first_mb_addr: %u frame_num: %d key: %d\n",
                    first_mb_addr, p->poc.frame_num, key_this_frame);
         }
     }
@@ -647,6 +648,12 @@ static int h264_parse(AVCodecParserContext *s,
     }
 
     parse_nal_units(s, avctx, buf, buf_size);
+
+    if (!s->packet_corrupt) {
+        ++p->total_frame_number;
+    }
+
+    av_log(avctx, AV_LOG_ERROR, "Parsed packet at buf %p corrupt %d frame # %d\n", buf, s->packet_corrupt, p->total_frame_number);
 
     if (avctx->framerate.num)
         avctx->time_base = av_inv_q(av_mul_q(avctx->framerate, (AVRational){avctx->ticks_per_frame, 1}));
@@ -744,6 +751,7 @@ static av_cold int init(AVCodecParserContext *s)
     p->reference_dts = AV_NOPTS_VALUE;
     p->last_frame_num = INT_MAX;
     p->key_slice = 0;
+    p->total_frame_number = 0;
     ff_h264dsp_init(&p->h264dsp, 8, 1);
     return 0;
 }

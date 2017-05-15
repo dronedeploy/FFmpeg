@@ -1611,8 +1611,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
             }
             got_packet = 1;
         } else if (st->discard < AVDISCARD_ALL) {
+//            av_log(s, AV_LOG_ERROR, "Start parse_packet\n");
             if ((ret = parse_packet(s, &cur_pkt, cur_pkt.stream_index)) < 0)
                 return ret;
+//            av_log(s, AV_LOG_ERROR, "End parse_packet\n");
             st->codecpar->sample_rate = st->internal->avctx->sample_rate;
             st->codecpar->bit_rate = st->internal->avctx->bit_rate;
             st->codecpar->channels = st->internal->avctx->channels;

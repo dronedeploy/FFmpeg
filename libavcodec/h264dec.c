@@ -713,6 +713,10 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
             } else
 #endif
                     ret = ff_h264_execute_decode_slices(h);
+//                if (ret < 0) {
+//                    av_log(h->avctx, AV_LOG_ERROR, "Got ret %d from ff_h264_execute_decode_slices\n");
+//                    goto end;
+//                }
                 if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
                     goto end;
             }

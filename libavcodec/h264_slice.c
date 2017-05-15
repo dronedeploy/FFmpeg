@@ -1654,6 +1654,7 @@ static int h264_slice_header_parse(const H264Context *h, H264SliceContext *sl,
         av_assert0(!h->setup_finished);
 
     sl->first_mb_addr = get_ue_golomb_long(&sl->gb);
+//    av_log(h->avctx, AV_LOG_ERROR, "Decode: first_mb_addr: %u\n", sl->first_mb_addr);
 
     slice_type = get_ue_golomb_31(&sl->gb);
     if (slice_type > 9) {
@@ -1869,12 +1870,16 @@ static int h264_slice_init(H264Context *h, H264SliceContext *sl,
         av_log(h->avctx, AV_LOG_ERROR, "first_mb_in_slice overflow\n");
         return AVERROR_INVALIDDATA;
     }
+//    av_log(h->avctx, AV_LOG_ERROR, "Old Resync_mb_x %d, _y %d\n", sl->resync_mb_x, sl->resync_mb_y);
+
     sl->resync_mb_x = sl->mb_x =  sl->first_mb_addr % h->mb_width;
     sl->resync_mb_y = sl->mb_y = (sl->first_mb_addr / h->mb_width) <<
                                  FIELD_OR_MBAFF_PICTURE(h);
     if (h->picture_structure == PICT_BOTTOM_FIELD)
         sl->resync_mb_y = sl->mb_y = sl->mb_y + 1;
     av_assert1(sl->mb_y < h->mb_height);
+
+//    av_log(h->avctx, AV_LOG_ERROR, "Resync_mb_x %d, _y %d\n", sl->resync_mb_x, sl->resync_mb_y);
 
     ret = ff_h264_build_ref_list(h, sl);
     if (ret < 0)
@@ -2516,8 +2521,10 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         if (start_i) {
             int prev_status = h->slice_ctx[0].er.error_status_table[h->slice_ctx[0].er.mb_index2xy[start_i - 1]];
             prev_status &= ~ VP_START;
-            if (prev_status != (ER_MV_END | ER_DC_END | ER_AC_END))
+            if (prev_status != (ER_MV_END | ER_DC_END | ER_AC_END)) {
                 h->slice_ctx[0].er.error_occurred = 1;
+                av_log(h->avctx, AV_LOG_ERROR, "Error occurred at resync_mb_x %d, _y %d\n", sl->resync_mb_x, sl->resync_mb_y);
+            }
         }
     }
 
@@ -2529,8 +2536,10 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         ret = ff_init_cabac_decoder(&sl->cabac,
                               sl->gb.buffer + get_bits_count(&sl->gb) / 8,
                               (get_bits_left(&sl->gb) + 7) / 8);
-        if (ret < 0)
+        if (ret < 0) {
+            av_log(h->avctx, AV_LOG_ERROR, "Failed to init cabec decoder\n");
             return ret;
+        }
 
         ff_h264_init_cabac_states(h, sl);
 
@@ -2692,6 +2701,8 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
 finish:
     sl->deblocking_filter = orig_deblock;
+//    av_log(h->avctx, AV_LOG_ERROR,
+//           "bytestream %p end %p\n", sl->cabac.bytestream, sl->cabac.bytestream_end);
     return 0;
 }
 
