@@ -62,6 +62,7 @@ typedef struct H264ParseContext {
     int parse_last_mb;
     int64_t reference_dts;
     int last_frame_num, last_picture_structure;
+    int key_slice;
 } H264ParseContext;
 
 
@@ -251,6 +252,9 @@ static inline int parse_nal_units(AVCodecParserContext *s,
     int q264 = buf_size >=4 && !memcmp("Q264", buf, 4);
     int field_poc[2];
     int ret;
+    int slice_count = 0, expected_slice_count = -1;
+    unsigned key_this_frame = 0;
+    unsigned first_mb_addr = 0;
 
     /* set some sane default values */
     s->pict_type         = AV_PICTURE_TYPE_I;
@@ -325,7 +329,7 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             ff_h264_sei_decode(&p->sei, &nal.gb, &p->ps, avctx);
             break;
         case H264_NAL_IDR_SLICE:
-            s->key_frame = 1;
+            key_this_frame = 1;
 
             p->poc.prev_frame_num        = 0;
             p->poc.prev_frame_num_offset = 0;
@@ -333,12 +337,18 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             p->poc.prev_poc_lsb          = 0;
         /* fall through */
         case H264_NAL_SLICE:
-            get_ue_golomb_long(&nal.gb);  // skip first_mb_in_slice
+            ++slice_count;
+            first_mb_addr = get_ue_golomb_long(&nal.gb);
+
+            /* We skipped data */
+            if (slice_count == 1 && first_mb_addr != 0)
+                goto fail;
+
             slice_type   = get_ue_golomb_31(&nal.gb);
             s->pict_type = ff_h264_golomb_to_pict_type[slice_type % 5];
             if (p->sei.recovery_point.recovery_frame_cnt >= 0) {
                 /* key frame, since recovery_frame_cnt is set */
-                s->key_frame = 1;
+                key_this_frame = 1;
             }
             pps_id = get_ue_golomb(&nal.gb);
             if (pps_id >= MAX_PPS_COUNT) {
@@ -374,11 +384,18 @@ static inline int parse_nal_units(AVCodecParserContext *s,
 
             sps = p->ps.sps;
 
+            if (expected_slice_count < 0 && first_mb_addr > 0) {
+                expected_slice_count = (sps->mb_height * sps->mb_width) / first_mb_addr;
+            }
+
             // heuristic to detect non marked keyframes
             if (p->ps.sps->ref_frame_count <= 1 && p->ps.pps->ref_count[0] <= 1 && s->pict_type == AV_PICTURE_TYPE_I)
-                s->key_frame = 1;
+                key_this_frame = 1;
 
             p->poc.frame_num = get_bits(&nal.gb, sps->log2_max_frame_num);
+            if (slice_count == 1 && p->poc.frame_num != (p->poc.prev_frame_num + 1) % 16) {
+                goto fail;
+            }
 
             s->coded_width  = 16 * sps->mb_width;
             s->coded_height = 16 * sps->mb_height;
@@ -544,17 +561,50 @@ static inline int parse_nal_units(AVCodecParserContext *s,
                 p->last_frame_num = p->poc.frame_num;
             }
 
-            av_freep(&nal.rbsp_buffer);
-            return 0; /* no need to evaluate the rest */
+            if (key_this_frame) {
+                if (slice_count != p->key_slice + 1 && slice_count != 1) {
+                    av_log(avctx, AV_LOG_DEBUG, "Parse: key: %d, should be %d\n", slice_count - 1, p->key_slice);
+                    p->key_slice = 0;
+                    goto fail;
+                }
+                p->key_slice = slice_count;
+            }
+
+            av_log(avctx, AV_LOG_DEBUG, "Parse: first_mb_addr: %u frame_num: %d key: %d\n",
+                   first_mb_addr, p->poc.frame_num, key_this_frame);
         }
     }
     if (q264) {
         av_freep(&nal.rbsp_buffer);
         return 0;
     }
-    /* didn't find a picture! */
-    av_log(avctx, AV_LOG_ERROR, "missing picture in access unit with size %d\n", buf_size);
+
+    /* Found the right number of slices */
+    if (slice_count > 0 && expected_slice_count > 0 && slice_count == expected_slice_count) {
+        /* mark as keyframe when the last slice is key */
+        if (buf_size == buf_index && slice_count == expected_slice_count && key_this_frame) {
+            s->key_frame = 1;
+            p->key_slice = 0;
+        }
+
+        if (s->key_frame) {
+            s->packet_corrupt = 0;
+        }
+
+        av_freep(&nal.rbsp_buffer);
+        return 0;
+    }
+
+    if (expected_slice_count < 0) {
+        /* didn't find a picture! */
+        av_log(avctx, AV_LOG_ERROR, "missing picture in access unit with size %d\n", buf_size);
+    }
+
 fail:
+    av_log(avctx, AV_LOG_DEBUG, "Parse: fail frame_num: %d key: %d\n",
+           p->poc.frame_num, s->key_frame);
+    p->key_slice = 0;
+    s->packet_corrupt = 1;
     av_freep(&nal.rbsp_buffer);
     return -1;
 }
@@ -691,6 +741,7 @@ static av_cold int init(AVCodecParserContext *s)
 
     p->reference_dts = AV_NOPTS_VALUE;
     p->last_frame_num = INT_MAX;
+    p->key_slice = 0;
     ff_h264dsp_init(&p->h264dsp, 8, 1);
     return 0;
 }

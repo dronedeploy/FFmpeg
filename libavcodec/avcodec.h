@@ -5227,6 +5227,8 @@ typedef struct AVCodecParserContext {
      * one returned by a decoder.
      */
     int format;
+
+    int packet_corrupt;
 } AVCodecParserContext;
 
 typedef struct AVCodecParser {
