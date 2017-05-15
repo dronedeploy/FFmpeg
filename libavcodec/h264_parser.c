@@ -317,6 +317,8 @@ static inline int parse_nal_units(AVCodecParserContext *s,
         nal.ref_idc = get_bits(&nal.gb, 2);
         nal.type    = get_bits(&nal.gb, 5);
 
+        key_this_frame = 0;
+
         switch (nal.type) {
         case H264_NAL_SPS:
             ff_h264_decode_seq_parameter_set(&nal.gb, avctx, &p->ps, 0);
