@@ -253,7 +253,7 @@ static inline int parse_nal_units(AVCodecParserContext *s,
     int q264 = buf_size >=4 && !memcmp("Q264", buf, 4);
     int field_poc[2];
     int ret;
-    int slice_count = 0, expected_slice_count = -1;
+    int slice_count = 0, expected_slice_count = 1;
     unsigned key_this_frame = 0;
     unsigned first_mb_addr = 0;
 
@@ -387,8 +387,19 @@ static inline int parse_nal_units(AVCodecParserContext *s,
 
             sps = p->ps.sps;
 
-            if (expected_slice_count < 0 && first_mb_addr > 0) {
-                expected_slice_count = (sps->mb_height * sps->mb_width) / first_mb_addr;
+            if (expected_slice_count == 1 && first_mb_addr > 0) {
+                unsigned div = (sps->mb_height * sps->mb_width) / first_mb_addr;
+                unsigned mod = (sps->mb_height * sps->mb_width) % first_mb_addr;
+                if (mod == 0) {
+                    expected_slice_count = div;
+                } else {
+                    // each slice must provide an equal amount of macroblock lines
+                    // Consider an example with 3600 total lines, but with slices
+                    // indicating start lines of 0, 2400; in this case we have
+                    // missed the slice starting at 1200.
+                    av_log(avctx, AV_LOG_ERROR, "Parse: invalid slice count, addr: %d total %d\n", first_mb_addr, sps->mb_height * sps->mb_width);
+                    goto fail;
+                }
             }
 
             // heuristic to detect non marked keyframes
@@ -396,7 +407,13 @@ static inline int parse_nal_units(AVCodecParserContext *s,
                 key_this_frame = 1;
 
             p->poc.frame_num = get_bits(&nal.gb, sps->log2_max_frame_num);
-            if (slice_count == 1 && p->poc.frame_num != (p->poc.prev_frame_num + 1) % 16) {
+
+            // first slice of non-keyframe must be prev_frame_num + 1 or 0
+            if (slice_count == 1 &&
+                !key_this_frame &&
+                p->poc.frame_num != p->poc.prev_frame_num + 1 &&
+                p->poc.frame_num != 0) {
+                av_log(avctx, AV_LOG_ERROR, "Parse: frame_num: %d prev_frame_num+1: %d\n", p->poc.frame_num, p->poc.prev_frame_num);
                 goto fail;
             }
 
@@ -573,8 +590,8 @@ static inline int parse_nal_units(AVCodecParserContext *s,
                 p->key_slice = slice_count;
             }
 
-            av_log(avctx, AV_LOG_ERROR, "Parse: first_mb_addr: %u frame_num: %d key: %d\n",
-                   first_mb_addr, p->poc.frame_num, key_this_frame);
+            av_log(avctx, AV_LOG_ERROR, "Parse: first_mb_addr: %u frame_num: %d prev_frame_num: %d key: %d\n",
+                   first_mb_addr, p->poc.frame_num, p->poc.prev_frame_num, key_this_frame);
         }
     }
     if (q264) {
@@ -583,7 +600,7 @@ static inline int parse_nal_units(AVCodecParserContext *s,
     }
 
     /* Found the right number of slices */
-    if (slice_count > 0 && expected_slice_count > 0 && slice_count == expected_slice_count) {
+    if (slice_count == expected_slice_count) {
         /* mark as keyframe when the last slice is key */
         if (buf_size == buf_index && slice_count == expected_slice_count && key_this_frame) {
             s->key_frame = 1;
@@ -598,13 +615,13 @@ static inline int parse_nal_units(AVCodecParserContext *s,
         return 0;
     }
 
-    if (expected_slice_count < 0) {
+    if (slice_count == 0) {
         /* didn't find a picture! */
         av_log(avctx, AV_LOG_ERROR, "missing picture in access unit with size %d\n", buf_size);
     }
 
 fail:
-    av_log(avctx, AV_LOG_DEBUG, "Parse: fail frame_num: %d key: %d\n",
+    av_log(avctx, AV_LOG_ERROR, "Parse: fail frame_num: %d key: %d\n",
            p->poc.frame_num, s->key_frame);
     p->key_slice = 0;
     s->packet_corrupt = 1;
