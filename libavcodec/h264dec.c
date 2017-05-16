@@ -874,6 +874,8 @@ static int output_frame(H264Context *h, AVFrame *dst, H264Picture *srcp)
                       (srcp->crop_top  >> vshift) * dst->linesize[i];
         dst->data[i] += off;
     }
+    dst->poc_frame_num = srcp->poc;
+
     return 0;
 }
 

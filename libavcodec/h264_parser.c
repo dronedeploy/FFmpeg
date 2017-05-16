@@ -261,6 +261,7 @@ static inline int parse_nal_units(AVCodecParserContext *s,
     s->pict_type         = AV_PICTURE_TYPE_I;
     s->key_frame         = 0;
     s->picture_structure = AV_PICTURE_STRUCTURE_UNKNOWN;
+    s->frame_has_pps     = s->frame_has_sps = 0;
 
     ff_h264_sei_uninit(&p->sei);
     p->sei.frame_packing.frame_packing_arrangement_cancel_flag = -1;
@@ -323,10 +324,12 @@ static inline int parse_nal_units(AVCodecParserContext *s,
         switch (nal.type) {
         case H264_NAL_SPS:
             ff_h264_decode_seq_parameter_set(&nal.gb, avctx, &p->ps, 0);
+            s->frame_has_sps = 1;
             break;
         case H264_NAL_PPS:
             ff_h264_decode_picture_parameter_set(&nal.gb, avctx, &p->ps,
                                                  nal.size_bits);
+            s->frame_has_pps = 1;
             break;
         case H264_NAL_SEI:
             ff_h264_sei_decode(&p->sei, &nal.gb, &p->ps, avctx);
@@ -407,6 +410,9 @@ static inline int parse_nal_units(AVCodecParserContext *s,
                 key_this_frame = 1;
 
             p->poc.frame_num = get_bits(&nal.gb, sps->log2_max_frame_num);
+
+            s->poc_frame_num = p->poc.frame_num;
+            s->max_frame_num_plus1 = 1 << p->ps.sps->log2_max_frame_num;
 
             // first slice of non-keyframe must be prev_frame_num + 1 or 0
             if (slice_count == 1 &&

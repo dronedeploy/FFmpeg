@@ -5229,6 +5229,11 @@ typedef struct AVCodecParserContext {
     int format;
 
     int packet_corrupt;
+
+    /** Used for extracting SPS/PPS information for HW decoding */
+    int max_frame_num_plus1;
+    int poc_frame_num;
+    int frame_has_sps, frame_has_pps;
 } AVCodecParserContext;
 
 typedef struct AVCodecParser {

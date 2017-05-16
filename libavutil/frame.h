@@ -524,6 +524,9 @@ typedef struct AVFrame {
      * purpose.
      */
     AVBufferRef *opaque_ref;
+
+    /** For Videopreview */
+    int poc_frame_num;
 } AVFrame;
 
 /**
