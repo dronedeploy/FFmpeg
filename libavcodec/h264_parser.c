@@ -346,6 +346,10 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             ++slice_count;
             first_mb_addr = get_ue_golomb_long(&nal.gb);
 
+            if (s->frame_has_pps && s->frame_has_sps) {
+                key_this_frame = 1;
+            }
+
             /* We skipped data */
             if (slice_count == 1 && first_mb_addr != 0)
                 goto fail;
