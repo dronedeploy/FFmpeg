@@ -5234,6 +5234,7 @@ typedef struct AVCodecParserContext {
     int max_frame_num_plus1;
     int poc_frame_num;
     int frame_has_sps, frame_has_pps;
+    int last_key_slice;
 } AVCodecParserContext;
 
 typedef struct AVCodecParser {

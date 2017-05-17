@@ -347,6 +347,14 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             first_mb_addr = get_ue_golomb_long(&nal.gb);
 
             if (s->frame_has_pps && s->frame_has_sps) {
+                // the next set of slices (including this one) can be key, but only
+                // one slice is key per frame
+                s->last_key_slice = 0;
+                if (slice_count == 1) {
+                    key_this_frame = 1;
+                }
+            }
+            if (!s->frame_has_pps && !s->frame_has_pps && s->last_key_slice + 1 == slice_count) {
                 key_this_frame = 1;
             }
 
@@ -609,12 +617,15 @@ static inline int parse_nal_units(AVCodecParserContext *s,
         return 0;
     }
 
+    s->last_key_slice++;
+
     /* Found the right number of slices */
     if (slice_count == expected_slice_count) {
         /* mark as keyframe when the last slice is key */
         if (buf_size == buf_index && slice_count == expected_slice_count && key_this_frame) {
             s->key_frame = 1;
             p->key_slice = 0;
+            s->last_key_slice = -1;
         }
 
         if (s->key_frame) {

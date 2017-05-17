@@ -92,6 +92,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     s->dts_ref_dts_delta    = INT_MIN;
     s->pts_dts_delta        = INT_MIN;
     s->format               = -1;
+    s->last_key_slice       = -1;
 
     return s;
 
