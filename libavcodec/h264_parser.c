@@ -435,6 +435,11 @@ static inline int parse_nal_units(AVCodecParserContext *s,
                 goto fail;
             }
 
+            // for subsequent slices poc.frame_num == poc.prev_frame_num
+            if (slice_count > 1 && p->poc.frame_num != p->poc.prev_frame_num) {
+                goto fail;
+            }
+
             s->coded_width  = 16 * sps->mb_width;
             s->coded_height = 16 * sps->mb_height;
             s->width        = s->coded_width  - (sps->crop_right + sps->crop_left);
@@ -617,7 +622,9 @@ static inline int parse_nal_units(AVCodecParserContext *s,
         return 0;
     }
 
-    s->last_key_slice++;
+    if (s->last_key_slice >= 0) {
+        s->last_key_slice++;
+    }
 
     /* Found the right number of slices */
     if (slice_count == expected_slice_count) {
@@ -646,6 +653,7 @@ fail:
            p->poc.frame_num, s->key_frame);
     p->key_slice = 0;
     s->packet_corrupt = 1;
+    s->last_key_slice = -1;
     av_freep(&nal.rbsp_buffer);
     return -1;
 }
