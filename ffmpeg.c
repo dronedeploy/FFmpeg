@@ -1334,8 +1334,8 @@ static void do_video_out(OutputFile *of,
      */
     ost->frame_number++;
 
-    if (vstats_filename && frame_size)
-        do_video_stats(ost, frame_size);
+    //if (vstats_filename && frame_size)
+    //    do_video_stats(ost, frame_size);
   }
 
     if (!ost->last_frame)
@@ -1951,7 +1951,7 @@ static void flush_encoders(void)
                 pkt_size = pkt.size;
                 output_packet(of, &pkt, ost);
                 if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO && vstats_filename) {
-                    do_video_stats(ost, pkt_size);
+                    //do_video_stats(ost, pkt_size);
                 }
         }
     }

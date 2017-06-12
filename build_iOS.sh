@@ -18,11 +18,10 @@ CONFIGURE_FLAGS="--enable-cross-compile --disable-programs \
                  --disable-iconv --disable-bzlib \
                  	--enable-version3 \
                  	--enable-pthreads --disable-small \
-                 	--enable-vda --enable-vdpau --enable-asm \
+                 	--enable-asm \
                  	--enable-pic --enable-hwaccels \
-                 	--enable-hwaccel=h264_vda --enable-hwaccel=h264_vdpau --enable-memalign-hack \
                  --disable-decoders \
-                 	--enable-decoder=h264 --enable-decoder=aac\
+                 	--enable-decoder=aac\
                  --disable-encoders \
                  	--enable-encoder=aac \
                  --disable-parsers \
@@ -38,12 +37,13 @@ then
 	CONFIGURE_FLAGS="$CONFIGURE_FLAGS --enable-libfdk-aac"
 fi
 
-ARCHS="arm64 armv7s armv7 x86_64 i386"
+#ARCHS="arm64 armv7s armv7 x86_64 i386"
+ARCHS="arm64"
 
 COMPILE="y"
 LIPO="y"
 
-DEPLOYMENT_TARGET="6.0"
+DEPLOYMENT_TARGET="10.0"
 
 if [ "$*" ]
 then
@@ -78,7 +78,7 @@ then
 	if [ ! `which gas-preprocessor.pl` ]
 	then
 		echo 'gas-preprocessor.pl not found. Trying to install...'
-		(curl -L https://github.com/libav/gas-preprocessor/raw/master/gas-preprocessor.pl \
+		(curl -L https://github.com/FFmpeg/gas-preprocessor/raw/master/gas-preprocessor.pl \
 			-o /usr/local/bin/gas-preprocessor.pl \
 			&& chmod +x /usr/local/bin/gas-preprocessor.pl) \
 			|| exit 1
@@ -135,7 +135,7 @@ then
 		    --prefix="$THIN/$ARCH" \
 		|| exit 1
 
-		make -j8 install $EXPORT || exit 1
+		make -j4 install $EXPORT || exit 1
 		cd $CWD
 	done
 fi
