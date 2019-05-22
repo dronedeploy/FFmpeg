@@ -4357,6 +4357,10 @@ typedef struct AVCodecParserContext {
 	int frame_rate_den;
 	int frame_has_sps;
 	int frame_has_pps;
+
+    /** Corrupt frame rejection */
+    int packet_corrupt;
+    int last_key_slice;
 } AVCodecParserContext;
 
 typedef struct AVCodecParser {

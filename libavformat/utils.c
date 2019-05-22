@@ -1275,6 +1275,10 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt, int stream_index)
         if (st->parser->key_frame == -1 && st->parser->pict_type ==AV_PICTURE_TYPE_NONE && (pkt->flags&AV_PKT_FLAG_KEY))
             out_pkt.flags |= AV_PKT_FLAG_KEY;
 
+        if (st->parser->packet_corrupt) {
+            out_pkt.flags |= AV_PKT_FLAG_CORRUPT;
+        }
+
         compute_pkt_fields(s, st, st->parser, &out_pkt);
 
         if (out_pkt.data == pkt->data && out_pkt.size == pkt->size) {

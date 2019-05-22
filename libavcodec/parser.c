@@ -84,6 +84,8 @@ found:
     s->dts_sync_point       = INT_MIN;
     s->dts_ref_dts_delta    = INT_MIN;
     s->pts_dts_delta        = INT_MIN;
+    s->last_key_slice       = -1;
+    s->packet_corrupt       = 1;
     return s;
 
 err_out:
