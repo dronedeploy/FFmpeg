@@ -1884,6 +1884,13 @@ static int h264_decode_frame(AVCodecContext *avctx, void *data,
     if (buf_index < 0)
         return AVERROR_INVALIDDATA;
 
+    /* Propagate corrupt packet flags to the picture.
+     * NOTE that with FF_THREAD_FRAME decoding, this method does not work. */
+    if (h->cur_pic_ptr && (avpkt->flags & AV_PKT_FLAG_CORRUPT)
+        && h->cur_pic_ptr->f.pkt_pos == avpkt->pos) {
+        h->cur_pic_ptr->f.flags |= AV_FRAME_FLAG_PKT_CORRUPT;
+    }
+
     if (!h->cur_pic_ptr && h->nal_unit_type == NAL_END_SEQUENCE) {
         av_assert0(buf_index <= buf_size);
         goto out;

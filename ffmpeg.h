@@ -325,6 +325,9 @@ typedef struct InputStream {
     // number of frames/samples retrieved from the decoder
     uint64_t frames_decoded;
     uint64_t samples_decoded;
+
+    /* Frame rejection */
+    int latent_error;
 } InputStream;
 
 typedef struct InputFile {

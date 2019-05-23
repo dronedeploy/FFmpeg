@@ -891,6 +891,9 @@ static void do_video_out(AVFormatContext *s,
     int frame_size = 0;
     InputStream *ist = NULL;
 
+    if ((next_picture->flags & AV_FRAME_FLAG_PKT_CORRUPT))
+        return;
+
     if (ost->source_index >= 0)
         ist = input_streams[ost->source_index];
 
@@ -1928,6 +1931,15 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
     decoded_frame = ist->decoded_frame;
     pkt->dts  = av_rescale_q(ist->dts, AV_TIME_BASE_Q, ist->st->time_base);
 
+    /* Pass packet errors to decoder so it can tag frames */
+    if (pkt && (pkt->flags & AV_PKT_FLAG_KEY)) {
+        ist->latent_error = 0;
+    }
+    if (pkt && (pkt->flags & AV_PKT_FLAG_CORRUPT)) {
+        ist->latent_error = 1;
+    }
+    pkt->flags = ist->latent_error ? AV_PKT_FLAG_CORRUPT : 0;
+
     update_benchmark(NULL);
     ret = avcodec_decode_video2(ist->dec_ctx,
                                 decoded_frame, got_output, pkt);
@@ -2363,7 +2375,8 @@ static int init_input_stream(int ist_index, char *error, int error_len)
         }
 
         if (!av_dict_get(ist->decoder_opts, "threads", NULL, 0))
-            av_dict_set(&ist->decoder_opts, "threads", "auto", 0);
+            av_dict_set(&ist->decoder_opts, "threads", "1", 0);
+
         if ((ret = avcodec_open2(ist->dec_ctx, codec, &ist->decoder_opts)) < 0) {
             if (ret == AVERROR_EXPERIMENTAL)
                 abort_codec_experimental(codec, 0);
@@ -2375,6 +2388,8 @@ static int init_input_stream(int ist_index, char *error, int error_len)
             return ret;
         }
         assert_avoptions(ist->decoder_opts);
+
+        ist->latent_error                   = 1;
     }
 
     ist->next_pts = AV_NOPTS_VALUE;
