@@ -20,6 +20,10 @@
 
 #include "config.h"
 
+/* Config has it all wrong and not easy to fix; so fix it here */
+#undef EXTERN_ASM
+#define EXTERN_ASM _
+
 #ifdef __ELF__
 #   define ELF
 #else
