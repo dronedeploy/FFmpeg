@@ -20,6 +20,10 @@
 
 #include "config.h"
 
+/* Config has it all wrong and not easy to fix; so fix it here */
+#undef EXTERN_ASM
+#define EXTERN_ASM _
+
 #ifdef __ELF__
 #   define ELF
 #else
@@ -38,22 +42,6 @@
 #   define FUNC
 #else
 #   define FUNC @
-#endif
-
-#if   HAVE_NEON
-        .arch           armv7-a
-#elif HAVE_ARMV6T2
-        .arch           armv6t2
-#elif HAVE_ARMV6
-        .arch           armv6
-#elif HAVE_ARMV5TE
-        .arch           armv5te
-#endif
-
-#if   HAVE_NEON
-        .fpu            neon
-#elif HAVE_VFP
-        .fpu            vfp
 #endif
 
         .syntax unified
@@ -94,7 +82,19 @@ FUNC    .func   \name
 ELF     .size   \name, . - \name
         .purgem endconst
     .endm
+#if HAVE_SECTION_DATA_REL_RO
+.if \relocate
+        .section        .data.rel.ro
+.else
         .section        .rodata
+.endif
+#elif defined(_WIN32)
+        .section        .rdata
+#elif !defined(__MACH__)
+        .section        .rodata
+#else
+        .const_data
+#endif
         .align          \align
 \name:
 .endm
