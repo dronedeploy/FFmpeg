@@ -6,20 +6,6 @@
 	objectVersion = 51;
 	objects = {
 
-/* Begin PBXAggregateTarget section */
-		0302200E2299DD6B000D2A91 /* FFmpeg-universal */ = {
-			isa = PBXAggregateTarget;
-			buildConfigurationList = 0302200F2299DD6B000D2A91 /* Build configuration list for PBXAggregateTarget "FFmpeg-universal" */;
-			buildPhases = (
-				030220122299DD73000D2A91 /* ShellScript */,
-			);
-			dependencies = (
-			);
-			name = "FFmpeg-universal";
-			productName = "ffmpeg-universal";
-		};
-/* End PBXAggregateTarget section */
-
 /* Begin PBXBuildFile section */
 		03021FF32299C05F000D2A91 /* libavcodec.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 03021FF22299C05F000D2A91 /* libavcodec.a */; };
 		03021FFB2299C0AE000D2A91 /* libavfilter.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 03021FF42299C0AE000D2A91 /* libavfilter.a */; };
@@ -162,9 +148,6 @@
 					03021FCD2299ADC5000D2A91 = {
 						CreatedOnToolsVersion = 10.1;
 					};
-					0302200E2299DD6B000D2A91 = {
-						CreatedOnToolsVersion = 10.1;
-					};
 				};
 			};
 			buildConfigurationList = 03021FC22299AD81000D2A91 /* Build configuration list for PBXProject "FFmpeg" */;
@@ -180,7 +163,6 @@
 			projectRoot = "";
 			targets = (
 				03021FCD2299ADC5000D2A91 /* FFmpeg */,
-				0302200E2299DD6B000D2A91 /* FFmpeg-universal */,
 			);
 		};
 /* End PBXProject section */
@@ -227,7 +209,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_TEMP_DIR)/static/*/lib/*.b",
+				"$(TARGET_TEMP_DIR)/static/*/lib/*.a",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -253,23 +235,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "sh $SOURCE_ROOT/build_ios_xcode_lipo.sh\n";
-		};
-		030220122299DD73000D2A91 /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# From https://medium.com/@syshen/create-an-ios-universal-framework-148eb130a46c\n\nset -e  \n# If we're already inside this script then die  \nif [ -n \"$MULTIPLATFORM_BUILD_IN_PROGRESS\" ]; then  \nexit 0  \nfi  \nexport MULTIPLATFORM_BUILD_IN_PROGRESS=1  \n\n######################\n# Options\n######################\n\nFRAMEWORK_NAME=\"${PROJECT_NAME}\"\n\nSIMULATOR_BUILD_DIR=\"${BUILD_DIR}/${CONFIGURATION}-iphonesimulator\"\nSIMULATOR_LIBRARY_PATH=\"${SIMULATOR_BUILD_DIR}/${FRAMEWORK_NAME}.framework\"\n\nDEVICE_BUILD_DIR=\"${BUILD_DIR}/${CONFIGURATION}-iphoneos\"\nDEVICE_LIBRARY_PATH=\"${DEVICE_BUILD_DIR}/${FRAMEWORK_NAME}.framework\"\n\nUNIVERSAL_BUILD_DIR=\"${BUILD_DIR}/${CONFIGURATION}-iphoneuniversal\"\nUNIVERSAL_LIBRARY_DIR=\"${UNIVERSAL_BUILD_DIR}/${FRAMEWORK_NAME}.framework\"\n\n#\n# Build Frameworks\n#\n\nxcodebuild -target ${PROJECT_NAME} -scheme ${PROJECT_NAME} -sdk iphonesimulator -configuration ${CONFIGURATION} build CONFIGURATION_BUILD_DIR=\"${BUILD_DIR}/${CONFIGURATION}-iphonesimulator\" OBJROOT=\"${OBJROOT}/DependantBuilds\" 2>&1\n\nxcodebuild -target ${PROJECT_NAME} -scheme ${PROJECT_NAME} -sdk iphoneos -configuration ${CONFIGURATION} build CONFIGURATION_BUILD_DIR=\"${BUILD_DIR}/${CONFIGURATION}-iphoneos\" OBJROOT=\"${OBJROOT}/DependantBuilds\" 2>&1\n\n#\n# Create directory for universal\n#\n\nrm -rf \"${UNIVERSAL_BUILD_DIR}\"\nmkdir \"${UNIVERSAL_BUILD_DIR}\"\nmkdir \"${UNIVERSAL_LIBRARY_DIR}\"\n\n#\n# Copy device framework files to universal framework\n#\n\ncp -r \"${DEVICE_LIBRARY_PATH}/.\" \"${UNIVERSAL_LIBRARY_DIR}\"\n\n#\n# Make an universal binary\n#\n\nlipo \"${SIMULATOR_LIBRARY_PATH}/${FRAMEWORK_NAME}\" \"${DEVICE_LIBRARY_PATH}/${FRAMEWORK_NAME}\" -create -output \"${UNIVERSAL_LIBRARY_DIR}/${FRAMEWORK_NAME}\" | echo\n\n# merge dsyms\nUNIVERSAL_DSYM_DIR=\"${UNIVERSAL_BUILD_DIR}/${FRAMEWORK_NAME}.framework.dSYM/Contents/Resources/DWARF\"\nmkdir -p \"${UNIVERSAL_DSYM_DIR}\"\nlipo -create -output \"${UNIVERSAL_DSYM_DIR}/${FRAMEWORK_NAME}\" \\\n    \"${SIMULATOR_BUILD_DIR}/${FRAMEWORK_NAME}.framework.dSYM/Contents/Resources/DWARF/${FRAMEWORK_NAME}\" \\\n    \"${DEVICE_BUILD_DIR}/${FRAMEWORK_NAME}.framework.dSYM/Contents/Resources/DWARF/${FRAMEWORK_NAME}\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -374,22 +339,6 @@
 			};
 			name = Release;
 		};
-		030220102299DD6B000D2A91 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Debug;
-		};
-		030220112299DD6B000D2A91 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -407,15 +356,6 @@
 			buildConfigurations = (
 				03021FD52299ADC5000D2A91 /* Debug */,
 				03021FD62299ADC5000D2A91 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		0302200F2299DD6B000D2A91 /* Build configuration list for PBXAggregateTarget "FFmpeg-universal" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				030220102299DD6B000D2A91 /* Debug */,
-				030220112299DD6B000D2A91 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
