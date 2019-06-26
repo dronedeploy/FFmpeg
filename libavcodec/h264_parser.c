@@ -214,10 +214,12 @@ static inline int parse_nal_units(AVCodecParserContext *s,
     int field_poc[2];
 
     /* Frame rejection */
-    int slice_count = 0, expected_slice_count = 1;
+    int slice_count = 0;
     unsigned key_this_slice = 0;
     int first_mb_addr = 0;
-    int expected_mb_per_slice = -1;
+    int mb_row_starts[MAX_SLICES];
+    int mb_rows[MAX_SLICES];
+    int mb_rows_min = -1, mb_rows_max = -1;
 
     /* set some sane default values */
     s->pict_type         = AV_PICTURE_TYPE_I;
@@ -317,10 +319,12 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             slice_type   = get_ue_golomb_31(&h->gb);
             s->pict_type = golomb_to_pict_type[slice_type % 5];
 
-            // P4P doesn't like to indicate key slices as IDR slices.
+            mb_row_starts[slice_count-1] = first_mb_addr / (h->mb_width ?: 1);
+
+            /* P4P doesn't like to indicate key slices as IDR slices. */
             if (s->frame_has_pps && s->frame_has_sps) {
-                // the next set of slices (including this one) can be key,
-                // even if they are not indicated by IDR slices
+                /* The next set of slices (including this one) can be key,
+                 * even if they are not indicated by IDR slices */
                 s->last_key_slice = 0;
                 if (slice_count == 1) {
                     key_this_slice = 1;
@@ -361,25 +365,7 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             if(h->sps.ref_frame_count <= 1 && h->pps.ref_count[0] <= 1 && s->pict_type == AV_PICTURE_TYPE_I)
                 key_this_slice = 1;
 
-            if (expected_mb_per_slice == -1 && first_mb_addr > 0) {
-                // Determine expected number of macroblocks per complete frame
-                unsigned mb_num = h->sps.mb_width * h->sps.mb_height;
-
-                // And from that the number of slices per frame
-                expected_slice_count = ceil(mb_num / (double)first_mb_addr);
-
-                // And the number of macroblocks per slice
-                expected_mb_per_slice = first_mb_addr;
-            }
-
-            // Ensure the first_mb_addr for this slice did not skip data
-            if (expected_mb_per_slice * (slice_count - 1) != first_mb_addr) {
-                av_log(avctx, AV_LOG_ERROR, "Parse: invalid first_mb_addr %d for slice %d\n",
-                       first_mb_addr, slice_count - 1);
-                goto fail;
-            }
-
-            // first slice of non-keyframe must be prev_frame_num + 1 or 0
+            /* First slice of non-keyframe must be prev_frame_num + 1 or 0 */
             if (slice_count == 1 && !key_this_slice &&
                 h->frame_num != h->prev_frame_num + 1 &&
                 h->frame_num != 0) {
@@ -388,7 +374,7 @@ static inline int parse_nal_units(AVCodecParserContext *s,
                 goto fail;
             }
 
-            // for subsequent slices poc.frame_num == poc.prev_frame_num
+            /* For subsequent slices poc.frame_num == poc.prev_frame_num */
             if (slice_count > 1 && h->frame_num != h->prev_frame_num) {
                 av_log(avctx, AV_LOG_ERROR, "Parse: invalid frame_num %d, should be %d for slice %d\n",
                        h->frame_num, h->prev_frame_num, slice_count-1);
@@ -526,8 +512,10 @@ static inline int parse_nal_units(AVCodecParserContext *s,
                 h->key_slice = slice_count;
             }
 
-            av_log(avctx, AV_LOG_DEBUG, "Parse: first_mb_addr: %u frame_num: %d prev_frame_num: %d key: %d NAL %d\n",
-                   first_mb_addr, h->frame_num, h->prev_frame_num, key_this_slice, h->nal_unit_type);
+            av_log(avctx, AV_LOG_DEBUG,
+                   "Parse: first_mb %u mb_start: %u frame_num: %d prev_frame_num: %d key: %d NAL %d\n",
+                   first_mb_addr, mb_row_starts[slice_count-1], h->frame_num,
+                   h->prev_frame_num, key_this_slice, h->nal_unit_type);
         }
     }
     if (q264)
@@ -537,21 +525,51 @@ static inline int parse_nal_units(AVCodecParserContext *s,
         s->last_key_slice++;
     }
 
-    /* Found the right number of key slices */
-    if (h->key_slice == expected_slice_count) {
-        /* mark as keyframe when the last slice is key */
+    if (slice_count == 0) {
+        /* didn't find a picture! */
+        av_log(avctx, AV_LOG_ERROR, "missing picture in access unit with size %d\n", buf_size);
+        goto fail;
+    }
+
+    /* Expect first slice mb_start to be 0 */
+    if (mb_row_starts[0] != 0) {
+        av_log(avctx, AV_LOG_ERROR, "Parse: invalid first slice %d mb_start %d rows %d\n",
+               mb_row_starts[0], 0, mb_rows[0]);
+        goto fail;
+    }
+
+    /* Estimate number of macroblock rows in each slice, based on
+     * start offsets in each slice and the total number expected per frame */
+    for (int i = 0; i < slice_count-1; ++i) {
+        /* Compute to number of mb rows in this slice */
+        mb_rows[i] = mb_row_starts[i+1] - mb_row_starts[i];
+    }
+    mb_rows[slice_count-1] = h->mb_height - mb_row_starts[slice_count-1];
+
+    /* Expect mb rows per slice to be in [min, max], except the last slice
+     * which must be <= max */
+    mb_rows_max = ceil(h->mb_height / (float)slice_count);
+    mb_rows_min = floor(h->mb_height / (float)slice_count);
+    for (int i = 0; i < slice_count; ++i) {
+        av_log(avctx, AV_LOG_DEBUG, "Parse: slice %d had %d mb rows\n",
+               i, mb_rows[i]);
+
+        if (mb_rows[i] > mb_rows_max || (i < slice_count - 1 && mb_rows[i] < mb_rows_min)) {
+            av_log(avctx, AV_LOG_ERROR, "Parse: invalid slice %d mb_start %d rows %d\n",
+                   i, mb_row_starts[i], mb_rows[i]);
+            goto fail;
+        }
+    }
+
+    /* Mark as keyframe when the last slice is key */
+    if (h->key_slice == slice_count) {
         s->key_frame = 1;
         h->key_slice = 0;
         s->last_key_slice = -1;
         s->packet_corrupt = 0;
     }
 
-    if (slice_count == expected_slice_count) {
-        return 0;
-    } else if (slice_count == 0) {
-        /* didn't find a picture! */
-        av_log(avctx, AV_LOG_ERROR, "missing picture in access unit with size %d\n", buf_size);
-    }
+    return 0;
 
 fail:
     av_log(avctx, AV_LOG_ERROR, "Parse: fail frame_num: %d key: %d\n",
